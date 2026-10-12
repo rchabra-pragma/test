@@ -5,6 +5,7 @@ import { Platform } from 'react-native';
 const DISCOVERY: AuthSession.DiscoveryDocument = {
   authorizationEndpoint: 'https://accounts.google.com/o/oauth2/v2/auth',
   tokenEndpoint: 'https://oauth2.googleapis.com/token',
+  revocationEndpoint: 'https://oauth2.googleapis.com/revoke',
 };
 
 /** appdata = a private per-app folder. The app can never see the rest of the user's Drive. */
@@ -29,31 +30,70 @@ export const isConfigured = () => {
   }
 };
 
-// ponytail: implicit token, no refresh token, no secret. Backup is user-initiated, so a re-consent tap is cheaper than a token store.
+// Authorization-code + PKCE. Google rejects the implicit flow (`response_type=token`) for installed
+// apps, so the code is exchanged for a token with a verifier instead of a client secret.
 let token: { value: string; expiresAt: number } | null = null;
+let refreshToken: string | null = null;
+
+const EXPIRY_SKEW = 60_000;
+
+const store = (auth: { accessToken: string; expiresIn?: number | null; refreshToken?: string | null }) => {
+  token = { value: auth.accessToken, expiresAt: Date.now() + (auth.expiresIn ?? 3600) * 1000 };
+  if (auth.refreshToken) refreshToken = auth.refreshToken;
+  return token.value;
+};
+
+/** Silent renewal. Returns null when there is no usable refresh token, so the caller falls back to consent. */
+async function refresh(): Promise<string | null> {
+  if (!refreshToken) return null;
+  try {
+    const result = await AuthSession.refreshAsync({ clientId: clientId(), refreshToken }, DISCOVERY);
+    return result.accessToken ? store(result) : null;
+  } catch {
+    refreshToken = null;
+    return null;
+  }
+}
 
 async function accessToken(): Promise<string> {
-  if (token && token.expiresAt > Date.now() + 60_000) return token.value;
+  if (token && token.expiresAt > Date.now() + EXPIRY_SKEW) return token.value;
 
+  const renewed = await refresh();
+  if (renewed) return renewed;
+
+  const redirectUri = AuthSession.makeRedirectUri({ scheme: 'expensemanager' });
   const request = new AuthSession.AuthRequest({
     clientId: clientId(),
     scopes: SCOPES,
-    responseType: AuthSession.ResponseType.Token,
-    redirectUri: AuthSession.makeRedirectUri(),
-    usePKCE: false,
+    responseType: AuthSession.ResponseType.Code,
+    redirectUri,
+    usePKCE: true,
+    extraParams: { access_type: 'offline', prompt: 'consent' },
   });
+
   const result = await request.promptAsync(DISCOVERY);
-  if (result.type !== 'success' || !result.authentication?.accessToken) {
+  if (result.type !== 'success' || !result.params.code) {
     throw new Error(result.type === 'error' ? (result.error?.message ?? 'Google sign-in failed.') : 'Google sign-in cancelled.');
   }
-  const auth = result.authentication;
-  token = { value: auth.accessToken, expiresAt: Date.now() + (auth.expiresIn ?? 3600) * 1000 };
-  return token.value;
+
+  const exchanged = await AuthSession.exchangeCodeAsync(
+    {
+      clientId: clientId(),
+      code: result.params.code,
+      redirectUri,
+      extraParams: { code_verifier: request.codeVerifier ?? '' },
+    },
+    DISCOVERY,
+  );
+  if (!exchanged.accessToken) throw new Error('Google did not return an access token.');
+  return store(exchanged);
 }
 
 export const signOut = () => {
   token = null;
+  refreshToken = null;
 };
+
 
 async function api(url: string, init: RequestInit = {}) {
   const res = await fetch(url, {
@@ -105,4 +145,20 @@ export async function restore<T>(): Promise<{ savedAt: number; data: T } | null>
   const res = await api(`${FILES}/${id}?alt=media`);
   const json = await res.json();
   return json && typeof json === 'object' && 'data' in json ? json : null;
+}
+
+/**
+ * Delete the Drive backup and disconnect the account.
+ * Google Play requires an in-app path to erase data an app has stored off-device.
+ */
+export async function deleteBackup(): Promise<string> {
+  const id = await findFileId();
+  if (id) await api(`${FILES}/${id}`, { method: 'DELETE' });
+
+  const toRevoke = refreshToken ?? token?.value;
+  if (toRevoke) {
+    await AuthSession.revokeAsync({ token: toRevoke, clientId: clientId() }, DISCOVERY).catch(() => {});
+  }
+  signOut();
+  return id ? 'Backup deleted from Google Drive and the account disconnected.' : 'No backup to delete. Account disconnected.';
 }

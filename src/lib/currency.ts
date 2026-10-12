@@ -4,6 +4,20 @@ export type Currency = { code: string; label: string; symbol: string; flag: stri
 
 export const DEFAULT_CURRENCY = 'USD';
 
+/** ISO-4217 minor units that are not 2. Everything else formats with 2 decimals. */
+const MINOR_UNITS: Record<string, number> = {
+  JPY: 0,
+  KRW: 0,
+  VND: 0,
+  CLP: 0,
+  ISK: 0,
+  IDR: 0,
+  KWD: 3,
+  BHD: 3,
+  OMR: 3,
+  JOD: 3,
+};
+
 /** Circulating ISO-4217 currencies, most-used first. Symbol falls back to the code where there is no common glyph. */
 export const CURRENCIES: Currency[] = [
   { code: 'USD', label: 'US Dollar', symbol: '$', flag: '🇺🇸' },
@@ -68,6 +82,10 @@ export const currencyOf = (code: string): Currency =>
   CURRENCIES.find((x) => x.code === code) ?? { code, label: code, symbol: code, flag: '🏳️' };
 
 export const symbolOf = (code: string) => currencyOf(code).symbol;
+
+/** Decimal places a currency is written with: ¥1,234 not ¥1,234.00, KD1.234 not KD1.23. */
+export const decimalsOf = (code: string): number => MINOR_UNITS[code] ?? 2;
+
 
 /** Filter for the picker: matches code or label, case-insensitively. Empty query keeps the list order. */
 export const searchCurrencies = (query: string): Currency[] => {

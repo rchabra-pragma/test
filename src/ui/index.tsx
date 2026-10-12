@@ -1,7 +1,7 @@
 import React, { createContext, useContext } from 'react';
-import { Modal, Platform, Pressable, StyleSheet, Text, View, useWindowDimensions, type ViewStyle } from 'react-native';
+import { Modal, Pressable, StyleSheet, Text, View, useWindowDimensions, type ViewStyle } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle } from 'react-native-svg';
-import { slices } from '../lib/logic';
 
 export const dark = {
   bg: '#0E1016',
@@ -45,11 +45,13 @@ export function Screen({
   children: React.ReactNode;
 }) {
   const c = useTheme();
-  const { width } = useWindowDimensions();
+  const { width, height } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  const landscape = width > height;
   return (
     <Modal animationType="slide" onRequestClose={onClose} presentationStyle="fullScreen">
-      <View style={[s.screen, { backgroundColor: c.bg }]}>
-        <View style={{ width: Math.min(width, 620), flex: 1 }}>
+      <View style={[s.screen, { backgroundColor: c.bg, paddingTop: insets.top }]}>
+        <View style={{ width: Math.min(width - insets.left - insets.right, landscape ? 760 : 620), flex: 1 }}>
           <View style={[s.row, s.screenHeader, { borderColor: c.border }]}>
             <Pressable onPress={onClose} accessibilityRole="button" accessibilityLabel="Back" hitSlop={12}>
               <Text style={{ color: c.text, fontSize: 24, lineHeight: 28 }}>‹</Text>
@@ -128,10 +130,12 @@ export function Button({
   label,
   onPress,
   tone = 'accent',
+  icon,
 }: {
   label: string;
   onPress: () => void;
   tone?: 'accent' | 'ghost' | 'danger';
+  icon?: React.ReactNode;
 }) {
   const c = useTheme();
   const bg = tone === 'accent' ? c.accent : tone === 'danger' ? c.expense : 'transparent';
@@ -143,6 +147,7 @@ export function Button({
         { backgroundColor: bg, borderColor: tone === 'ghost' ? c.border : bg, opacity: pressed ? 0.75 : 1 },
       ]}
     >
+      {icon}
       <Text style={{ color: tone === 'ghost' ? c.text : c.onAccent, fontWeight: '700' }}>{label}</Text>
     </Pressable>
   );
@@ -155,7 +160,7 @@ export function Donut({
   thickness = 26,
   center,
 }: {
-  data: { total: number; color: string }[];
+  data: { total: number; frac: number; offset: number; color: string }[];
   size?: number;
   thickness?: number;
   center?: React.ReactNode;
@@ -163,12 +168,11 @@ export function Donut({
   const c = useTheme();
   const r = (size - thickness) / 2;
   const circumference = 2 * Math.PI * r;
-  const parts = slices(data);
   return (
     <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
       <Svg width={size} height={size} style={StyleSheet.absoluteFill}>
         <Circle cx={size / 2} cy={size / 2} r={r} stroke={c.card2} strokeWidth={thickness} fill="none" />
-        {parts.map((p, i) => (
+        {data.map((p, i) => (
           <Circle
             key={i}
             cx={size / 2}
@@ -203,9 +207,9 @@ export const s = StyleSheet.create({
   chip: { paddingHorizontal: 14, paddingVertical: 9, borderRadius: 999, borderWidth: 1 },
   segment: { flexDirection: 'row', padding: 4, borderRadius: 12, borderWidth: 1, gap: 4 },
   segmentItem: { flex: 1, paddingVertical: 8, borderRadius: 9, alignItems: 'center' },
-  btn: { paddingVertical: 13, paddingHorizontal: 20, borderRadius: 13, borderWidth: 1, alignItems: 'center' },
+  btn: { flexDirection: 'row', gap: 10, paddingVertical: 13, paddingHorizontal: 20, borderRadius: 13, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   row: { flexDirection: 'row', alignItems: 'center' },
-  screen: { flex: 1, alignItems: 'center', paddingTop: Platform.OS === 'web' ? 12 : 48 },
+  screen: { flex: 1, alignItems: 'center' },
   screenHeader: { paddingHorizontal: 16, paddingVertical: 12, gap: 12, borderBottomWidth: 1 },
   field: { borderWidth: 1, borderRadius: 13, paddingHorizontal: 14, paddingVertical: 12 },
   backdrop: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#0009' },

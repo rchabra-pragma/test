@@ -1,7 +1,7 @@
-// Run: node src/logic.test.ts   (node >=22 strips the types)
+// Run: npm test   (node >=22 strips the types)
 import assert from 'node:assert/strict';
-import { byCategory, backupIsStale, byCurrency, filterTxs, fromISO, groupByDate, groupForPeriod, inPeriod, isDate, isNewerVersion, money, monthLabel, periodKey, shiftPeriod, slices, suggestCategory, suggestions, toCSV, today, toISO, totals, totalsByCurrency, type Tx } from './logic.ts';
-import { CURRENCIES, DEFAULT_CURRENCY, currencyOf, searchCurrencies, symbolOf } from './currency.ts';
+import { byCategory, backupIsStale, byCurrency, filterTxs, fromISO, groupByDate, groupForPeriod, inPeriod, isDate, isNewerVersion, money, monthLabel, periodKey, shiftPeriod, slices, suggestCategory, suggestions, toCSV, today, toISO, totals, totalsByCurrency, type Tx } from '../src/lib/logic.ts';
+import { CURRENCIES, DEFAULT_CURRENCY, currencyOf, searchCurrencies, symbolOf } from '../src/lib/currency.ts';
 
 const tx = (id: string, type: Tx['type'], amount: number, category: string, date: string, note = '', currency = DEFAULT_CURRENCY): Tx => ({
   id,

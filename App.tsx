@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { StatusBar } from 'expo-status-bar';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
+  KeyboardAvoidingView,
   Modal,
   Platform,
   Pressable,
@@ -13,6 +14,7 @@ import {
   View,
   useWindowDimensions,
 } from 'react-native';
+import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   DEFAULT_CATEGORIES,
   ICONS,
@@ -26,14 +28,14 @@ import {
   isDate,
   money,
   monthLabel,
+  newId,
   periodLabel,
+  relativeDate,
   shiftPeriod,
   slices,
-  suggestCategory,
   suggestions,
   toCSV,
   today,
-  totals,
   totalsByCurrency,
   type Category,
   type Filter,
@@ -43,8 +45,11 @@ import {
 } from './src/lib/logic';
 import { DEFAULT_CURRENCY, currencyOf } from './src/lib/currency';
 import { Bar, Button, Card, Chip, Donut, Screen, Segmented, ThemeCtx, dark, light, s as ui } from './src/ui';
+import AdBanner from './src/ui/AdBanner';
 import CurrencyPicker from './src/ui/CurrencyPicker';
 import DateField from './src/ui/DateField';
+import ErrorBoundary from './src/ui/ErrorBoundary';
+import Icon from './src/ui/Icon';
 import Settings from './src/ui/Settings';
 import { exportPDF } from './src/services/pdf';
 import * as Drive from './src/services/drive';
@@ -73,18 +78,19 @@ const withCurrency = (s: Saved): Saved => ({
   txs: s.txs.map((t) => (t.currency ? t : { ...t, currency: s.currency ?? DEFAULT_CURRENCY })),
 });
 
-const prettyDate = (d: string) => {  const t = today();
-  if (d === t) return 'Today';
-  if (d === new Date(Date.parse(t) - 864e5).toISOString().slice(0, 10)) return 'Yesterday';
-  return new Date(d + 'T00:00:00').toLocaleDateString(undefined, {
-    weekday: 'short',
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-  });
-};
+const prettyDate = (d: string) => relativeDate(d);
 
 export default function App() {
+  return (
+    <SafeAreaProvider>
+      <ErrorBoundary>
+        <ExpenseApp />
+      </ErrorBoundary>
+    </SafeAreaProvider>
+  );
+}
+
+function ExpenseApp() {
   const [state, setState] = useState<Saved>({
     txs: [],
     cats: DEFAULT_CATEGORIES,
@@ -100,11 +106,17 @@ export default function App() {
   const [editing, setEditing] = useState<Tx | 'new' | null>(null);
   const [busy, setBusy] = useState('');
   const [notice, setNotice] = useState('');
-  const [askBackup, setAskBackup] = useState(false);
+  const [backupDismissed, setBackupDismissed] = useState(false);
   const [settings, setSettings] = useState(false);
   const [update, setUpdate] = useState<UpdateInfo | null>(null);
+  const [adHeight, setAdHeight] = useState(0);
   const { width, height } = useWindowDimensions();
-  const adHeight = Math.min(Math.round(height * 0.1), 60);
+  const insets = useSafeAreaInsets();
+  // Landscape and tablets get a wider column; the content stays centred and readable on every size.
+  const landscape = width > height;
+  const contentWidth = Math.min(width - insets.left - insets.right, landscape ? 760 : 620);
+  // Floating controls clear the home indicator / gesture bar as well as the ad.
+  const bottomGap = insets.bottom + adHeight;
 
   useEffect(() => {
     AsyncStorage.getItem(KEY)
@@ -121,13 +133,10 @@ export default function App() {
     checkForUpdate().then(setUpdate);
   }, []);
 
-  useEffect(() => {
-    if (ready && Drive.isConfigured() && backupIsStale(state.lastBackupAt)) setAskBackup(true);
-  }, [ready]);
-
   const c = state.theme === 'dark' ? dark : light;
+  // Derived, not an effect: the prompt is just "there is a stale backup and the user hasn't waved it away".
+  const askBackup = ready && !backupDismissed && Drive.isConfigured() && backupIsStale(state.lastBackupAt);
   const visible = useMemo(() => filterTxs(inPeriod(state.txs, period, ref), filter), [state.txs, period, ref, filter]);
-  const sum = totals(visible);
   const colorOf = (name: string) => state.cats.find((x) => x.name === name)?.color ?? c.sub;
   const iconOf = (name: string) => state.cats.find((x) => x.name === name)?.icon ?? '•';
 
@@ -145,7 +154,7 @@ export default function App() {
       setNotice(e instanceof Error ? e.message : 'Google Drive failed.');
     } finally {
       setBusy('');
-      setAskBackup(false);
+      setBackupDismissed(true);
     }
   };
 
@@ -191,11 +200,18 @@ export default function App() {
 
   const downloadPDF = () => exportPDF(visible, period, ref).catch((e) => setNotice(e?.message ?? 'Could not create the PDF.'));
 
+  const deleteBackup = () =>
+    runDrive('Deleting…', async () => {
+      const message = await Drive.deleteBackup();
+      setState((s) => ({ ...s, lastBackupAt: null }));
+      return message;
+    });
+
   return (
     <ThemeCtx.Provider value={c}>
-      <View style={[st.app, { backgroundColor: c.bg }]}>
+      <View style={[st.app, { backgroundColor: c.bg, paddingTop: insets.top }]}>
         <StatusBar style={state.theme === 'dark' ? 'light' : 'dark'} />
-        <View style={{ width: Math.min(width, 620), flex: 1 }}>
+        <View style={{ width: contentWidth, flex: 1 }}>
           <View style={[ui.row, st.header]}>
             <View style={{ flex: 1 }}>
               <Text style={{ color: c.sub, fontSize: 13 }}>Day-to-day</Text>
@@ -224,7 +240,7 @@ export default function App() {
             {period !== 'day' && <Segmented options={FILTERS} value={filter} onChange={setFilter} />}
           </View>
 
-          <ScrollView contentContainerStyle={{ padding: 16, paddingTop: 4, paddingBottom: 130 + adHeight }}>
+          <ScrollView contentContainerStyle={{ padding: 16, paddingTop: 4, paddingBottom: 130 + bottomGap }}>
             <Card style={{ marginBottom: 16, gap: 14 }}>
               {(totalsByCurrency(visible).length ? totalsByCurrency(visible) : [{ currency: state.currency, income: 0, expense: 0, balance: 0 }]).map(
                 (t) => (
@@ -261,7 +277,7 @@ export default function App() {
             )}
           </ScrollView>
 
-          <View style={[st.tabbar, { bottom: adHeight + 20, backgroundColor: c.card, borderColor: c.border }]}>
+          <View style={[st.tabbar, { bottom: bottomGap + 20, backgroundColor: c.card, borderColor: c.border }]}>
             <Chip label="🧾  Transactions" active={tab === 'home'} onPress={() => setTab('home')} />
             <Chip label="📊  Reports" active={tab === 'reports'} onPress={() => setTab('reports')} />
           </View>
@@ -270,7 +286,7 @@ export default function App() {
             onPress={() => setEditing('new')}
             accessibilityRole="button"
             accessibilityLabel="Add entry"
-            style={[st.fab, { bottom: adHeight + 92, backgroundColor: c.accent }]}
+            style={[st.fab, { bottom: bottomGap + 92, backgroundColor: c.accent }]}
           >
             <Text style={{ color: c.onAccent, fontSize: 30, marginTop: -3 }}>+</Text>
           </Pressable>
@@ -280,13 +296,13 @@ export default function App() {
               onPress={downloadPDF}
               accessibilityRole="button"
               accessibilityLabel={`Download ${periodLabel(ref, period)} as PDF`}
-              style={[st.fabSmall, { bottom: adHeight + 34, backgroundColor: c.card, borderColor: c.border }]}
+              style={[st.fabSmall, { bottom: bottomGap + 34, backgroundColor: c.card, borderColor: c.border }]}
             >
-              <Text style={{ fontSize: 18 }}>⬇️</Text>
+              <Icon name="download" size={22} color={c.text} />
             </Pressable>
           )}
 
-          <AdSlot height={adHeight} />
+          <AdBanner onHeight={setAdHeight} />
         </View>
 
         {editing && (
@@ -319,6 +335,7 @@ export default function App() {
             driveReady={Drive.isConfigured()}
             onBackup={backupNow}
             onRestore={restoreNow}
+            onDeleteBackup={deleteBackup}
             onClose={() => setSettings(false)}
           />
         )}
@@ -333,7 +350,7 @@ export default function App() {
             }
             confirm={busy || 'Back up now'}
             onConfirm={backupNow}
-            onClose={() => setAskBackup(false)}
+            onClose={() => setBackupDismissed(true)}
           />
         )}
 
@@ -382,20 +399,6 @@ function PeriodNav({ period, value, onChange }: { period: Period; value: string;
           <Text style={{ color: atNow ? c.border : c.text, fontSize: 20, paddingHorizontal: 8 }}>›</Text>
         </Pressable>
       )}
-    </View>
-  );
-}
-
-/**
- * Reserved banner strip, capped at 10% of the screen.
- * ponytail: a placeholder, not a live ad. AdMob (react-native-google-mobile-ads) needs a dev build and a publisher
- * account, so drop <BannerAd /> in here once those exist — the layout already leaves the space.
- */
-function AdSlot({ height }: { height: number }) {
-  const c = React.useContext(ThemeCtx);
-  return (
-    <View style={[st.ads, { height, backgroundColor: c.card, borderColor: c.border }]}>
-      <Text style={{ color: c.sub, fontSize: 11 }}>Ad</Text>
     </View>
   );
 }
@@ -576,8 +579,8 @@ function Reports({
         />
       ))}
 
-      <Button label="⬇  Export CSV" tone="ghost" onPress={onExport} />
-      <Button label="📄  Download PDF" tone="ghost" onPress={onPDF} />
+      <Button label="Export CSV" tone="ghost" icon={<Icon name="download" />} onPress={onExport} />
+      <Button label="Download PDF" tone="ghost" icon={<Icon name="document" />} onPress={onPDF} />
 
       {drill && (
         <CategoryDetail
@@ -744,6 +747,7 @@ function Editor({
   onAddCategory: (c: Category) => void;
 }) {
   const c = React.useContext(ThemeCtx);
+  const insets = useSafeAreaInsets();
   const [type, setType] = useState<TxType>(tx?.type ?? 'expense');
   const [amount, setAmount] = useState(tx ? String(tx.amount) : '');
   const [currency, setCurrency] = useState(tx?.currency ?? defaultCurrency);
@@ -762,7 +766,7 @@ function Editor({
     if (!(value > 0)) return setError('Enter an amount greater than 0.');
     if (!category) return setError('Pick a category.');
     if (!isDate(date)) return setError('Date must be a real YYYY-MM-DD.');
-    onSave({ id: tx?.id ?? String(Date.now()), type, amount: value, currency, category, note: note.trim(), date });
+    onSave({ id: tx?.id ?? newId(), type, amount: value, currency, category, note: note.trim(), date });
   };
 
   const addCategory = () => {
@@ -786,8 +790,18 @@ function Editor({
   return (
     <Modal transparent animationType="slide" onRequestClose={onClose}>
       <Pressable style={ui.backdrop} onPress={onClose} />
-      <View style={[ui.sheet, { backgroundColor: c.card, borderColor: c.border }]}>
-        <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 32, gap: 14 }}>
+      <KeyboardAvoidingView
+        // iOS slides the sheet above the keyboard; Android resizes the window itself.
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={st.sheetWrap}
+        pointerEvents="box-none"
+      >
+        <View style={[ui.sheet, { position: 'relative', backgroundColor: c.card, borderColor: c.border }]}>
+          <ScrollView
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
+            contentContainerStyle={{ padding: 20, paddingBottom: 32 + insets.bottom, gap: 14 }}
+          >
           <View style={[ui.row, { justifyContent: 'space-between' }]}>
             <Text style={{ color: c.text, fontSize: 19, fontWeight: '800' }}>{tx ? 'Edit entry' : 'New entry'}</Text>
             <Pressable onPress={onClose}>
@@ -897,14 +911,15 @@ function Editor({
 
           <Button label={tx ? 'Save changes' : 'Add entry'} onPress={submit} />
           {tx && <Button label="Delete" tone="danger" onPress={() => onDelete(tx.id)} />}
-        </ScrollView>
-      </View>
+          </ScrollView>
+        </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
 
 const st = StyleSheet.create({
-  app: { flex: 1, alignItems: 'center', paddingTop: Platform.OS === 'web' ? 12 : 48 },
+  app: { flex: 1, alignItems: 'center' },
   header: { paddingHorizontal: 16, paddingVertical: 12 },
   iconBtn: { width: 42, height: 42, borderRadius: 21, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   txRow: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12, borderRadius: 14 },
@@ -940,7 +955,7 @@ const st = StyleSheet.create({
     justifyContent: 'center',
   },
   iconPick: { width: 42, height: 42, borderRadius: 12, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
-  ads: { position: 'absolute', left: 0, right: 0, bottom: 0, borderTopWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  sheetWrap: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'flex-end' },
   dialogWrap: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', padding: 24 },
   dialog: { width: '100%', maxWidth: 420, borderRadius: 20, borderWidth: 1, padding: 20 },
 });

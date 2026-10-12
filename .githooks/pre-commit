@@ -1,0 +1,37 @@
+#!/bin/sh
+#
+# Pre-commit checks: lint and types.
+#
+# Tests are deliberately NOT run here - they are slower than a commit should be.
+# Run them yourself with `npm test`, or the full set with `npm run verify`.
+#
+# Installed by `npm install` (the "prepare" script points core.hooksPath at .githooks).
+# To install by hand:   git config core.hooksPath .githooks
+# To skip once:         git commit --no-verify   (or SKIP_HOOKS=1 git commit ...)
+#
+# These run against the working tree rather than the staged snapshot. That is
+# deliberate: it is the state you are about to push from, and it avoids a stash
+# dance that can lose work if a check fails midway.
+
+set -e
+
+if [ "$SKIP_HOOKS" = "1" ]; then
+  echo "pre-commit: skipped (SKIP_HOOKS=1)"
+  exit 0
+fi
+
+run() {
+  label="$1"
+  shift
+  printf '\npre-commit: %s\n' "$label"
+  if ! "$@"; then
+    printf '\npre-commit: %s FAILED - commit aborted.\n' "$label"
+    printf 'Fix the problems above, or bypass with: git commit --no-verify\n'
+    exit 1
+  fi
+}
+
+run "eslint"    npm run --silent lint
+run "typecheck" npm run --silent typecheck
+
+printf '\npre-commit: all checks passed.\n'

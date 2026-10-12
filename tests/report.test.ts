@@ -1,7 +1,7 @@
-// Run: node src/report.test.ts   (node >=22 strips the types)
+// Run: npm test   (node >=22 strips the types)
 import assert from 'node:assert/strict';
-import { reportFileName, reportHTML, reportTitle } from './report.ts';
-import type { Tx } from './logic.ts';
+import { reportFileName, reportHTML, reportTitle } from '../src/lib/report.ts';
+import type { Tx } from '../src/lib/logic.ts';
 
 const tx = (id: string, type: Tx['type'], amount: number, category: string, date: string, note = '', currency = 'USD'): Tx => ({
   id,

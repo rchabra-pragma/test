@@ -19,6 +19,7 @@ export type SettingsProps = {
   driveReady: boolean;
   onBackup: () => void;
   onRestore: () => void;
+  onDeleteBackup: () => void;
   onClose: () => void;
 };
 
@@ -32,6 +33,7 @@ export default function Settings({
   driveReady,
   onBackup,
   onRestore,
+  onDeleteBackup,
   onClose,
 }: SettingsProps) {
   const c = useContext(ThemeCtx);
@@ -64,6 +66,14 @@ export default function Settings({
             </Text>
             <Button label={busy || 'Back up now'} onPress={onBackup} />
             <Button label="Restore from Drive" tone="ghost" onPress={onRestore} />
+          </Card>
+          <Card style={{ gap: 10 }}>
+            <Text style={{ color: c.text, fontWeight: '700' }}>🗑  Delete backup</Text>
+            <Text style={{ color: c.sub, fontSize: 13, lineHeight: 19 }}>
+              Erases the backup from your Google Drive and disconnects the account. Entries on this device are kept — remove the
+              app to delete those.
+            </Text>
+            <Button label="Delete backup & disconnect" tone="danger" onPress={onDeleteBackup} />
           </Card>
         </View>
 

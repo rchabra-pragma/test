@@ -3,17 +3,21 @@
     "name": "Expense Manager",
     "slug": "expense-manager",
     "version": "1.0.0",
-    "orientation": "portrait",
+    "orientation": "default",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "automatic",
     "scheme": "expensemanager",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.expensemanager.app"
+      "bundleIdentifier": "com.expensemanager.app",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "package": "com.expensemanager.app",
       "allowBackup": false,
+      "permissions": ["com.google.android.gms.permission.AD_ID"],
       "adaptiveIcon": {
         "backgroundColor": "#0E1016",
         "foregroundImage": "./assets/android-icon-foreground.png",
@@ -28,15 +32,35 @@
     "plugins": [
       "@react-native-community/datetimepicker",
       "expo-sharing",
-      "expo-web-browser"
+      "expo-web-browser",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 180,
+          "resizeMode": "contain",
+          "backgroundColor": "#F4F5F9",
+          "dark": { "backgroundColor": "#0E1016" }
+        }
+      ],
+      [
+        "expo-tracking-transparency",
+        {
+          "userTrackingPermissionTextIOS": "This lets us show ads that are more relevant to you. Your expense data is never shared."
+        }
+      ],
+      [
+        "react-native-google-mobile-ads",
+        {
+          "androidAppId": "ca-app-pub-3940256099942544~3347511713",
+          "iosAppId": "ca-app-pub-3940256099942544~1458002511"
+        }
+      ]
     ],
     "extra": {
-      "google": {
-        "ios": "",
-        "android": "",
-        "web": ""
-      },
-      "androidUpdateUrl": ""
+      "google": { "ios": "", "android": "", "web": "" },
+      "androidUpdateUrl": "",
+      "admob": { "bannerAndroid": "", "bannerIos": "" }
     }
   }
 }

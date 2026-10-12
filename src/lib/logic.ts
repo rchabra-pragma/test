@@ -1,5 +1,5 @@
 // Pure logic. No React / react-native imports so it stays testable with plain node.
-import { DEFAULT_CURRENCY, symbolOf } from './currency.ts';
+import { DEFAULT_CURRENCY, decimalsOf, symbolOf } from './currency.ts';
 
 export type TxType = 'income' | 'expense';
 
@@ -38,8 +38,32 @@ export const fromISO = (s: string) => (isDate(s) ? new Date(`${s}T12:00:00`) : n
 
 export const today = () => toISO(new Date());
 
+/**
+ * 'Today' / 'Yesterday' / a written date. `ref` is the day to count back from.
+ * Uses fromISO so a DST jump can never shift the comparison a day.
+ */
+export function relativeDate(iso: string, ref = today()): string {
+  if (iso === ref) return 'Today';
+  const prev = fromISO(ref);
+  prev.setDate(prev.getDate() - 1);
+  if (iso === toISO(prev)) return 'Yesterday';
+  return fromISO(iso).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+/**
+ * Unique, chronologically sortable entry id. The millisecond prefix keeps the
+ * `id.localeCompare` ordering used by suggestions/grouping working against ids
+ * written before the random suffix existed.
+ */
+export const newId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
 export const money = (n: number, currency = DEFAULT_CURRENCY) =>
-  (n < 0 ? '-' : '') + symbolOf(currency) + Math.abs(n).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  (n < 0 ? '-' : '') +
+  symbolOf(currency) +
+  Math.abs(n)
+    .toFixed(decimalsOf(currency))
+    .replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+
 
 /** Entries split per currency, biggest group first. Amounts in different currencies are never added together. */
 export function byCurrency(txs: Tx[]): [string, Tx[]][] {
@@ -118,7 +142,10 @@ export const suggestCategory = (txs: Tx[], type: TxType, note: string) =>
 export function totals(txs: Tx[]) {
   let income = 0;
   let expense = 0;
-  for (const t of txs) t.type === 'income' ? (income += t.amount) : (expense += t.amount);
+  for (const t of txs) {
+    if (t.type === 'income') income += t.amount;
+    else expense += t.amount;
+  }
   return { income, expense, balance: income - expense };
 }
 
