@@ -4,6 +4,7 @@
 node_modules/
 # this project uses npm; a stray pnpm lockfile makes EAS Build infer the wrong package manager
 pnpm-lock.yaml
+pnpm-workspace.yaml
 yarn.lock
 
 # Expo
@@ -35,6 +36,13 @@ yarn-error.*
 
 # local env files
 .env*.local
+
+# credentials — never commit these
+.env
+play-service-account.json
+*-service-account.json
+google-services.json
+GoogleService-Info.plist
 
 # typescript
 *.tsbuildinfo

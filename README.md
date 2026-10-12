@@ -66,7 +66,7 @@ Secrets and account-specific ids are **not** committed. Fill these in `app.json`
 | Key | Purpose |
 | --- | --- |
 | `expo.extra.google.{ios,android,web}` | OAuth client ids for Google Drive backup. Empty = backup hidden. |
-| `expo.extra.admob.{bannerIos,bannerAndroid}` | AdMob banner unit ids. Empty = Google test ad in dev, no ad in release. |
+| `expo.extra.admob.{bannerIos,bannerAndroid}` | AdMob banner unit ids, used in release builds only (empty = no ad). Development always serves Google's test ad, so you can never rack up invalid traffic on your own live units. |
 | `expo.extra.androidUpdateUrl` | Optional JSON feed (`{version, notes, url}`) powering the Android update prompt. |
 | `react-native-google-mobile-ads` plugin `androidAppId` / `iosAppId` | AdMob **app** ids. Currently Google's public test ids — replace before shipping. |
 

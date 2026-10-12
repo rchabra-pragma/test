@@ -33,11 +33,11 @@ type AdConfig = { bannerAndroid?: string; bannerIos?: string };
 
 const unitId = (): string | null => {
   if (!ads) return null;
+  // Development always gets Google's test unit, never the real one. Impressions and taps on your
+  // own live ads are invalid traffic and get AdMob accounts suspended.
+  if (__DEV__) return ads.TestIds.BANNER ?? null;
   const cfg = (Constants.expoConfig?.extra?.admob ?? {}) as AdConfig;
-  const configured = Platform.OS === 'ios' ? cfg.bannerIos : cfg.bannerAndroid;
-  if (configured) return configured;
-  // No real unit configured: serve Google's test ad in development, nothing in a release build.
-  return __DEV__ ? (ads.TestIds.BANNER ?? null) : null;
+  return (Platform.OS === 'ios' ? cfg.bannerIos : cfg.bannerAndroid) || null;
 };
 
 /** iOS must ask before an ad can be personalised; a denied prompt just means non-personalised ads. */
