@@ -19,7 +19,10 @@ export default function DateField({ value, onChange, label }: DateFieldProps) {
         borderRadius: 13,
         padding: '12px 14px',
         fontSize: 15,
-        fontFamily: 'inherit',
+        fontWeight: 400,
+        // Not 'inherit': react-native-web's wrapper divs set no font-family, so inheriting falls
+        // through to the browser default (a serif) and looks nothing like the inputs beside it.
+        fontFamily: 'system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
         width: '100%',
         boxSizing: 'border-box',
         colorScheme: c === dark ? 'dark' : 'light',

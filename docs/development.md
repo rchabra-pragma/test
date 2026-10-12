@@ -21,6 +21,22 @@ Everything you need to work on the app day to day. For release and store submiss
 ```bash
 git clone <repo-url>
 cd test
+npm run setup
+```
+
+`npm run setup` is the one-step path: it checks your Node version, installs dependencies, wires up
+the git hooks and starts the dev server. Flags:
+
+| Flag | Effect |
+| --- | --- |
+| `--android` / `--ios` / `--web` | Open that platform directly |
+| `--no-start` | Set up only, don't start the dev server |
+
+Pass them after `--`, for example `npm run setup -- --android`.
+
+Doing it by hand instead:
+
+```bash
 npm install          # also installs the git hooks via the "prepare" script
 npm start            # Expo dev server
 ```
@@ -48,6 +64,7 @@ npx expo run:ios
 
 | Command | What it does |
 | --- | --- |
+| `npm run setup` | One-step setup: toolchain check, install, hooks, start |
 | `npm start` | Expo dev server |
 | `npm run android` / `ios` / `web` | Start on a specific platform |
 | `npm test` | Every `tests/**/*.test.ts` |

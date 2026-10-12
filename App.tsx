@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { StatusBar } from 'expo-status-bar';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Modal,
@@ -37,6 +37,7 @@ import {
   toCSV,
   today,
   totalsByCurrency,
+  txLabel,
   type Category,
   type Filter,
   type Period,
@@ -524,7 +525,7 @@ function TxRow({
         <Text style={{ fontSize: 17 }}>{iconOf(tx.category)}</Text>
       </View>
       <View style={{ flex: 1 }}>
-        <Text style={{ color: c.text, fontWeight: '600' }}>{title ?? tx.category}</Text>
+        <Text style={{ color: c.text, fontWeight: '600' }}>{title ?? txLabel(tx)}</Text>
         {!!sub && (
           <Text numberOfLines={1} style={{ color: c.sub, fontSize: 12, marginTop: 2 }}>
             {sub}
@@ -643,7 +644,7 @@ function CategoryDetail({
               colorOf={colorOf}
               iconOf={iconOf}
               title={prettyDate(tx.date)}
-              subtitle={tx.note}
+              subtitle={tx.info?.trim() || tx.note}
               onPress={() => {
                 onClose();
                 onPick(tx);
@@ -752,6 +753,7 @@ function Editor({
   const [amount, setAmount] = useState(tx ? String(tx.amount) : '');
   const [currency, setCurrency] = useState(tx?.currency ?? defaultCurrency);
   const [category, setCategory] = useState(tx?.category ?? '');
+  const [info, setInfo] = useState(tx?.info ?? '');
   const [note, setNote] = useState(tx?.note ?? '');
   const [date, setDate] = useState(tx?.date ?? today());
   const [newCat, setNewCat] = useState('');
@@ -759,14 +761,27 @@ function Editor({
   const [error, setError] = useState('');
 
   const options = cats.filter((x) => x.type === type);
-  const hints = useMemo(() => suggestions(txs, type, note), [txs, type, note]);
+  const hints = useMemo(() => suggestions(txs, type, info), [txs, type, info]);
+  const [hintsOpen, setHintsOpen] = useState(false);
+  // Blur fires before the tap on a suggestion lands, so closing is deferred by a frame or two.
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => void (closeTimer.current && clearTimeout(closeTimer.current)), []);
 
   const submit = () => {
     const value = Number(amount);
     if (!(value > 0)) return setError('Enter an amount greater than 0.');
     if (!category) return setError('Pick a category.');
     if (!isDate(date)) return setError('Date must be a real YYYY-MM-DD.');
-    onSave({ id: tx?.id ?? newId(), type, amount: value, currency, category, note: note.trim(), date });
+    onSave({
+      id: tx?.id ?? newId(),
+      type,
+      amount: value,
+      currency,
+      info: info.trim(),
+      category,
+      note: note.trim(),
+      date,
+    });
   };
 
   const addCategory = () => {
@@ -778,10 +793,11 @@ function Editor({
     setNewIcon(ICONS[0]);
   };
 
-  /** Reuse a past entry: fills the note and its category. */
-  const applyHint = (hint: { note: string; category: string }) => {
-    setNote(hint.note);
+  /** Reuse a past entry: fills the info and its category. */
+  const applyHint = (hint: { info: string; category: string }) => {
+    setInfo(hint.info);
     setCategory(hint.category);
+    setHintsOpen(false);
     setError('');
   };
 
@@ -821,20 +837,73 @@ function Editor({
             }}
           />
 
-          <TextInput
-            value={amount}
-            onChangeText={(v) => {
-              setAmount(v.replace(/[^0-9.]/g, ''));
+          <DateField
+            value={date}
+            onChange={(v) => {
+              setDate(v);
               setError('');
             }}
-            keyboardType="decimal-pad"
-            placeholder="0.00"
-            placeholderTextColor={c.sub}
-            style={[input, { fontSize: 30, fontWeight: '800', textAlign: 'center', paddingVertical: 16 }]}
           />
 
-          <Text style={{ color: c.sub, fontSize: 13, fontWeight: '600' }}>Currency</Text>
-          <CurrencyPicker value={currency} onChange={setCurrency} />
+          <View style={[ui.row, { gap: 10, alignItems: 'stretch', zIndex: 2 }]}>
+            <View style={{ flex: 1 }}>
+              <TextInput
+                value={info}
+                onChangeText={(v) => {
+                  setInfo(v);
+                  setHintsOpen(true);
+                }}
+                onFocus={() => {
+                  if (closeTimer.current) clearTimeout(closeTimer.current);
+                  setHintsOpen(true);
+                }}
+                onBlur={() => {
+                  closeTimer.current = setTimeout(() => setHintsOpen(false), 150);
+                }}
+                placeholder="Enter Info"
+                placeholderTextColor={c.sub}
+                style={input}
+              />
+              {hintsOpen && !!hints.length && (
+                <View style={[st.dropdown, { backgroundColor: c.card2, borderColor: c.border }]}>
+                  <ScrollView keyboardShouldPersistTaps="always" style={{ maxHeight: 176 }}>
+                    {hints.map((h, i) => (
+                      <Pressable
+                        key={h.info}
+                        accessibilityRole="button"
+                        onPress={() => applyHint(h)}
+                        style={({ pressed }) => [
+                          st.dropdownItem,
+                          i > 0 && { borderTopWidth: 1, borderColor: c.border },
+                          pressed && { backgroundColor: c.card },
+                        ]}
+                      >
+                        <Text numberOfLines={1} style={{ color: c.text, fontSize: 15 }}>
+                          {h.info}
+                        </Text>
+                        <Text style={{ color: c.sub, fontSize: 12 }}>{h.category}</Text>
+                      </Pressable>
+                    ))}
+                  </ScrollView>
+                </View>
+              )}
+            </View>
+            {/* Currency lives inside the amount box so the two read as one value: [ USD | 0.00 ] */}
+            <View style={[input, ui.row, { flex: 1, paddingVertical: 0 }]}>
+              <CurrencyPicker value={currency} onChange={setCurrency} compact />
+              <TextInput
+                value={amount}
+                onChangeText={(v) => {
+                  setAmount(v.replace(/[^0-9.]/g, ''));
+                  setError('');
+                }}
+                keyboardType="decimal-pad"
+                placeholder="0.00"
+                placeholderTextColor={c.sub}
+                style={{ flex: 1, color: c.text, fontSize: 15, fontWeight: '700', paddingVertical: 12 }}
+              />
+            </View>
+          </View>
 
           <Text style={{ color: c.sub, fontSize: 13, fontWeight: '600' }}>Category</Text>
           <View style={[ui.row, { flexWrap: 'wrap', gap: 8 }]}>
@@ -881,31 +950,13 @@ function Editor({
             </ScrollView>
           </View>
 
-          <Text style={{ color: c.sub, fontSize: 13, fontWeight: '600' }}>Date</Text>
-          <DateField
-            label="Date"
-            value={date}
-            onChange={(v) => {
-              setDate(v);
-              setError('');
-            }}
-          />
-
           <TextInput
             value={note}
             onChangeText={setNote}
-            placeholder="Note (optional)"
+            placeholder="Description (optional)"
             placeholderTextColor={c.sub}
             style={input}
           />
-          {/* ponytail: chips are the autocomplete on every platform — one list instead of a native dropdown plus a web <datalist>. */}
-          {!!hints.length && (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
-              {hints.map((h) => (
-                <Chip key={h.note} label={`${h.note} · ${h.category}`} onPress={() => applyHint(h)} />
-              ))}
-            </ScrollView>
-          )}
 
           {!!error && <Text style={{ color: c.expense, fontSize: 13 }}>{error}</Text>}
 
@@ -955,6 +1006,21 @@ const st = StyleSheet.create({
     justifyContent: 'center',
   },
   iconPick: { width: 42, height: 42, borderRadius: 12, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  // Overlays the fields below rather than pushing them down. Android needs elevation as well as
+  // zIndex, otherwise the panel renders behind its siblings.
+  dropdown: {
+    position: 'absolute',
+    top: '100%',
+    left: 0,
+    right: 0,
+    marginTop: 4,
+    borderWidth: 1,
+    borderRadius: 13,
+    overflow: 'hidden',
+    zIndex: 10,
+    elevation: 6,
+  },
+  dropdownItem: { paddingHorizontal: 14, paddingVertical: 10, gap: 2 },
   sheetWrap: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'flex-end' },
   dialogWrap: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', padding: 24 },
   dialog: { width: '100%', maxWidth: 420, borderRadius: 20, borderWidth: 1, padding: 20 },

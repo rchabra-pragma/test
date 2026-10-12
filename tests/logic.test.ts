@@ -1,6 +1,6 @@
 // Run: npm test   (node >=22 strips the types)
 import assert from 'node:assert/strict';
-import { byCategory, backupIsStale, byCurrency, filterTxs, fromISO, groupByDate, groupForPeriod, inPeriod, isDate, isNewerVersion, money, monthLabel, periodKey, shiftPeriod, slices, suggestCategory, suggestions, toCSV, today, toISO, totals, totalsByCurrency, type Tx } from '../src/lib/logic.ts';
+import { byCategory, backupIsStale, byCurrency, filterTxs, fromISO, groupByDate, groupForPeriod, inPeriod, isDate, isNewerVersion, money, monthLabel, periodKey, shiftPeriod, slices, suggestCategory, suggestions, toCSV, today, toISO, totals, totalsByCurrency, txLabel, type Tx } from '../src/lib/logic.ts';
 import { CURRENCIES, DEFAULT_CURRENCY, currencyOf, searchCurrencies, symbolOf } from '../src/lib/currency.ts';
 
 const tx = (id: string, type: Tx['type'], amount: number, category: string, date: string, note = '', currency = DEFAULT_CURRENCY): Tx => ({
@@ -69,9 +69,19 @@ assert.equal(slices([{ total: 0 }])[0].frac, 0); // no divide-by-zero
 
 // csv escapes quotes/commas and is oldest first
 const csv = toCSV(txs).split('\n');
-assert.equal(csv[0], 'Date,Type,Category,Currency,Amount,Note');
-assert.equal(csv[1], '2026-08-31,expense,Bills,USD,900.00,');
-assert.equal(csv[3], '2026-09-01,expense,Food,USD,250.50,"lunch, with ""tip"""');
+assert.equal(csv[0], 'Date,Type,Info,Category,Currency,Amount,Description');
+// no info on these legacy-shaped entries, so the Info column falls back to the category
+assert.equal(csv[1], '2026-08-31,expense,Bills,Bills,USD,900.00,');
+assert.equal(csv[3], '2026-09-01,expense,Food,Food,USD,250.50,"lunch, with ""tip"""');
+assert.equal(
+  toCSV([{ ...txs[0], info: 'Monthly pay' }]).split('\n')[1],
+  '2026-09-01,income,Monthly pay,Salary,USD,5000.00,',
+);
+
+// txLabel: the info field is the entry's label, with the category as a fallback
+assert.equal(txLabel({ ...txs[0], info: 'Coffee' }), 'Coffee');
+assert.equal(txLabel({ ...txs[0], info: '   ' }), 'Salary'); // whitespace-only is not a label
+assert.equal(txLabel(txs[0]), 'Salary'); // entries saved before the field existed
 
 // formatting + validation
 assert.equal(money(1234567.5), '$1,234,567.50');
@@ -110,23 +120,33 @@ assert.equal(backupIsStale(null, 2, now), true);
 assert.equal(backupIsStale(now - 3 * 864e5, 2, now), true);
 assert.equal(backupIsStale(now - 864e5, 2, now), false);
 
-// suggestions from past entries
+// suggestions from past entries — keyed on info, falling back to the note for legacy entries
 const past: Tx[] = [
   tx('10', 'expense', 120, 'Food', '2026-09-01', 'Chai stall'),
   tx('11', 'expense', 60, 'Transport', '2026-09-02', 'Metro card'),
   tx('12', 'expense', 130, 'Food', '2026-09-03', 'chai stall'), // newer duplicate wins, case-insensitive
   tx('13', 'income', 5000, 'Salary', '2026-09-03', 'Monthly pay'),
-  tx('14', 'expense', 10, 'Food', '2026-09-03', ''), // blank notes are not suggestions
+  tx('14', 'expense', 10, 'Food', '2026-09-03', ''), // blank labels are not suggestions
 ];
 assert.deepEqual(
-  suggestions(past, 'expense', '').map((s) => s.note),
+  suggestions(past, 'expense', '').map((s) => s.info),
   ['chai stall', 'Metro card'],
 );
-assert.deepEqual(suggestions(past, 'expense', 'CHAI').map((s) => s.note), ['chai stall']);
-assert.deepEqual(suggestions(past, 'income', '').map((s) => s.note), ['Monthly pay']);
+assert.deepEqual(suggestions(past, 'expense', 'CHAI').map((s) => s.info), ['chai stall']);
+assert.deepEqual(suggestions(past, 'income', '').map((s) => s.info), ['Monthly pay']);
 assert.equal(suggestions(past, 'expense', '', 1).length, 1);
 assert.equal(suggestCategory(past, 'expense', 'Chai Stall'), 'Food');
 assert.equal(suggestCategory(past, 'expense', 'unseen note'), '');
+
+// info wins over the note, and de-dupes against a legacy entry carrying the same label
+const labelled: Tx[] = [
+  { ...tx('20', 'expense', 50, 'Food', '2026-09-04', 'paid by card'), info: 'Chai stall' },
+  tx('21', 'expense', 40, 'Food', '2026-09-05', 'Chai stall'),
+];
+assert.deepEqual(
+  suggestions(labelled, 'expense', '').map((s) => s.info),
+  ['Chai stall'],
+);
 
 // version compare for the update prompt
 assert.ok(isNewerVersion('1.2.10', '1.2.9'));

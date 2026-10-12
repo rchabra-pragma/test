@@ -48,4 +48,19 @@ assert.ok(!yearly.includes('<td>2026-09-02</td>'));
 assert.ok(yearly.includes('September 2026') || yearly.includes('2026'));
 assert.ok(html.includes('<h2>Entries</h2>')); // month view still lists entries
 
+// the entries table carries the info column, and its footer spans every column but the amount
+const countCols = (markup: string, tag: 'th' | 'td') => [...markup.matchAll(new RegExp(`<${tag}[ >]`, 'g'))].length;
+const headRow = html.match(/<thead><tr>(.*?)<\/tr>/s)![1];
+assert.equal(headRow.includes('<th>Info</th>'), true);
+const footSpan = Number(html.match(/<tfoot><tr><td colspan="(\d+)">Balance/)![1]);
+assert.equal(footSpan + 1, countCols(headRow, 'th'), 'balance footer must span the full entries table');
+
+const yearFoot = Number(yearly.match(/<tfoot><tr><td colspan="(\d+)">Balance/)![1]);
+const yearHead = yearly.match(/<thead><tr>(.*?)<\/tr>/s)![1];
+assert.equal(yearFoot + 1, countCols(yearHead, 'th'), 'month view footer must span its own narrower table');
+
+// info is used as the entry label, with the category as the fallback
+const labelled = reportHTML([{ ...txs[1], info: 'Chai stall' }], 'month', '2026-09-10');
+assert.ok(labelled.includes('<td>Chai stall</td>') && labelled.includes('<td>Food</td>'));
+
 console.log('ok - all report checks passed');

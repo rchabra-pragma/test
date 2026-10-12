@@ -1,6 +1,6 @@
 // Pure report rendering. No React / react-native imports so it stays testable with plain node.
 import { currencyOf } from './currency.ts';
-import { byCategory, byCurrency, groupByDate, groupForPeriod, money, monthLabel, periodLabel, totals, type Period, type Tx } from './logic.ts';
+import { byCategory, byCurrency, groupByDate, groupForPeriod, money, monthLabel, periodLabel, totals, txLabel, type Period, type Tx } from './logic.ts';
 
 const esc = (s: string) => s.replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[ch]!);
 
@@ -42,6 +42,7 @@ function currencySection(items: Tx[], code: string, period: Period, showHeading:
         .map(
           (t) => `<tr>
         <td>${t.date}</td>
+        <td>${esc(txLabel(t))}</td>
         <td>${esc(t.category)}</td>
         <td>${esc(t.note) || '&mdash;'}</td>
         <td class="r ${t.type}">${t.type === 'income' ? '+' : '&minus;'}${esc(money(t.amount, code))}</td>
@@ -51,7 +52,7 @@ function currencySection(items: Tx[], code: string, period: Period, showHeading:
 
   const head = byMonth
     ? '<tr><th>Month</th><th>Entries</th><th class="r">Income</th><th class="r">Expense</th></tr>'
-    : '<tr><th>Date</th><th>Category</th><th>Details</th><th class="r">Amount</th></tr>';
+    : '<tr><th>Date</th><th>Info</th><th>Category</th><th>Description</th><th class="r">Amount</th></tr>';
 
   return `<section>
 ${showHeading ? `<h2 class="cur">${esc(`${cur.flag} ${cur.code} — ${cur.label}`)}</h2>` : ''}
@@ -70,7 +71,7 @@ ${
 ${
   rows
     ? `<table><thead>${head}</thead><tbody>${rows}</tbody>
-       <tfoot><tr><td colspan="3">Balance</td><td class="r">${esc(money(sum.balance, code))}</td></tr></tfoot></table>`
+       <tfoot><tr><td colspan="${byMonth ? 3 : 4}">Balance</td><td class="r">${esc(money(sum.balance, code))}</td></tr></tfoot></table>`
     : '<div class="empty">No entries in this period.</div>'
 }
 </section>`;
@@ -83,7 +84,7 @@ export function reportHTML(txs: Tx[], period: Period, ref: string): string {
     ? groups.map(([code, items]) => currencySection(items, code, period, groups.length > 1)).join('')
     : '<div class="empty">No entries in this period.</div>';
 
-  return `<!doctype html><html><head><meta charset="utf-8" />
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>${esc(reportTitle(period, ref))}</title>
 <style>

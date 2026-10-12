@@ -20,8 +20,14 @@ the device; they only leave it when you back them up to your own Google Drive.
 Requires **Node >= 22**.
 
 ```bash
-npm install
-npm start          # then press a / i / w
+npm run setup
+```
+
+That checks your toolchain, installs dependencies, wires up the git hooks and starts the app.
+Add `--android`, `--ios` or `--web` to open a platform directly, or `--no-start` to set up only:
+
+```bash
+npm run setup -- --android
 ```
 
 Expo Go is enough for everyday work. Ads and other native modules need a development build —

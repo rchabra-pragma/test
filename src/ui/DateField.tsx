@@ -2,7 +2,8 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import React, { useContext, useState } from 'react';
 import { Platform, Pressable, Text } from 'react-native';
 import { fromISO, toISO } from '../lib/logic';
-import { ThemeCtx, s as ui } from './index';
+import Icon from './Icon';
+import { ThemeCtx, s as ui, fieldText } from './index';
 
 export type DateFieldProps = {
   value: string; // YYYY-MM-DD
@@ -25,10 +26,10 @@ export default function DateField({ value, onChange, label }: DateFieldProps) {
         onPress={() => setOpen(true)}
         style={[ui.row, ui.field, { backgroundColor: c.card2, borderColor: c.border }]}
       >
-        <Text style={{ color: c.text, fontSize: 15, flex: 1 }}>
+        <Text style={[fieldText, { color: c.text, flex: 1 }]}>
           {date.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}
         </Text>
-        <Text style={{ fontSize: 16 }}>📅</Text>
+        <Icon name="calendar" size={18} color={c.sub} />
       </Pressable>
 
       {open && (
@@ -38,10 +39,11 @@ export default function DateField({ value, onChange, label }: DateFieldProps) {
           // ponytail: inline calendar on iOS 14+, system dialog elsewhere. Add a spinner fallback only if an old-iOS bug shows up.
           display={Platform.OS === 'ios' ? 'inline' : 'default'}
           maximumDate={new Date()}
-          onChange={(e, picked) => {
+          onValueChange={(_, picked) => {
             setOpen(false);
-            if (e.type !== 'dismissed' && picked) onChange(toISO(picked));
+            onChange(toISO(picked));
           }}
+          onDismiss={() => setOpen(false)}
         />
       )}
     </>

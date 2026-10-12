@@ -8,10 +8,16 @@ export type Tx = {
   type: TxType;
   amount: number;
   currency: string; // ISO code, e.g. USD
+  /** Main label, e.g. "Coffee". Optional: entries saved before this field existed do not have it. */
+  info?: string;
   category: string;
+  /** Additional details, shown under the main label. */
   note: string;
   date: string; // YYYY-MM-DD
 };
+
+/** An entry's main label. Falls back to the category for entries saved before `info` existed. */
+export const txLabel = (tx: Tx): string => tx.info?.trim() || tx.category;
 
 export type Category = {
   name: string;
@@ -119,25 +125,27 @@ export function isNewerVersion(latest: string, current: string): boolean {
 export const backupIsStale = (lastBackupAt: number | null, days = 2, now = Date.now()) =>
   lastBackupAt === null || now - lastBackupAt > days * 864e5;
 
-/** Past entries matching what's being typed, newest first, de-duplicated by note. */
+/** Past entries matching what's being typed, newest first, de-duplicated by label. */
 export function suggestions(txs: Tx[], type: TxType, query: string, limit = 5) {
   const q = query.trim().toLowerCase();
   const seen = new Set<string>();
-  const out: { note: string; category: string; amount: number }[] = [];
+  const out: { info: string; category: string; amount: number }[] = [];
   for (const t of [...txs].sort((a, b) => b.id.localeCompare(a.id))) {
-    const key = t.note.trim().toLowerCase();
+    // Legacy entries have no info, so fall back to the note they were labelled with.
+    const label = (t.info?.trim() || t.note.trim()).trim();
+    const key = label.toLowerCase();
     if (t.type !== type || !key || seen.has(key)) continue;
     if (q && !key.includes(q)) continue;
     seen.add(key);
-    out.push({ note: t.note.trim(), category: t.category, amount: t.amount });
+    out.push({ info: label, category: t.category, amount: t.amount });
     if (out.length === limit) break;
   }
   return out;
 }
 
-/** Most-used category for a note the user has entered before. */
-export const suggestCategory = (txs: Tx[], type: TxType, note: string) =>
-  suggestions(txs, type, note, 1).find((s) => s.note.toLowerCase() === note.trim().toLowerCase())?.category ?? '';
+/** Most-used category for a label the user has entered before. */
+export const suggestCategory = (txs: Tx[], type: TxType, info: string) =>
+  suggestions(txs, type, info, 1).find((s) => s.info.toLowerCase() === info.trim().toLowerCase())?.category ?? '';
 
 export function totals(txs: Tx[]) {
   let income = 0;
@@ -196,10 +204,10 @@ const cell = (v: string | number) => {
 
 export function toCSV(txs: Tx[]): string {
   const rows: (string | number)[][] = [
-    ['Date', 'Type', 'Category', 'Currency', 'Amount', 'Note'],
+    ['Date', 'Type', 'Info', 'Category', 'Currency', 'Amount', 'Description'],
     ...[...txs]
       .sort((a, b) => a.date.localeCompare(b.date))
-      .map((t) => [t.date, t.type, t.category, t.currency, t.amount.toFixed(2), t.note]),
+      .map((t) => [t.date, t.type, txLabel(t), t.category, t.currency, t.amount.toFixed(2), t.note]),
   ];
   return rows.map((r) => r.map(cell).join(',')).join('\n');
 }

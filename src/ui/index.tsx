@@ -202,6 +202,12 @@ export function Bar({ frac, color }: { frac: number; color: string }) {
   );
 }
 
+/**
+ * Text metrics shared by every field-like control, so a tappable field (date, currency) reads
+ * identically to a real TextInput sitting next to it.
+ */
+export const fieldText = { fontSize: 15, fontWeight: '400' } as const;
+
 export const s = StyleSheet.create({
   card: { borderRadius: 18, borderWidth: 1, padding: 16 },
   chip: { paddingHorizontal: 14, paddingVertical: 9, borderRadius: 999, borderWidth: 1 },
